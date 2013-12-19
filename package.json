@@ -1,0 +1,8 @@
+{
+	"name": "mongodb-grouper",
+	"description": "Groups MongoDB requests",
+	"version": "0.0.1",
+	"dependencies": {
+		"async": "*"
+	}
+}
