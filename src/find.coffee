@@ -13,6 +13,9 @@ batchRunner = (queries, callback) ->
 	iterator = (set, next) ->
 		criteria = mergeCriteria set.map (query) -> query.criteria
 		[projection, shouldFilter] = mergeProjections set.map (query) -> query.projection
+
+		# console.log criteria
+
 		module.exports.super.call set[0].collection, criteria, projection, (err, cursor) ->
 			if err then return next err
 			cursor.each (err, item) ->
@@ -71,7 +74,7 @@ module.exports = (criteria, projection, callback) ->
 		projection = {}
 
 	if not batchable criteria, projection
-		return module.exports.super(criteria, projection).toArray callback
+		return module.exports.super.call(this, criteria, projection, callback)
 
 	cursor = new BatchCursor(this, criteria, projection)
 
@@ -87,19 +90,30 @@ collectionKey = (collection) -> collection.db.databaseName + ':' + collection.co
 
 # simple criteria for now, expand this later
 batchable = (criteria, projection) ->
-	keys = Object.keys criteria
-	return keys.length is 1 and keys[0] is '_id'
+	return true
+	# keys = Object.keys criteria
+	# return keys.length is 1
 
 mergeCriteria = (criteria) ->
+
 	fields = {}
 	criteria.forEach (crit) ->
 		for key, val of crit
 			fields[key] ?= []
 			fields[key].push val
 
-	for key, val of fields
-		if val.length > 1
-			fields[key] = $in: val
+	for key, values of fields
+		# convert queries with multiple values in to $in queries
+		if values.length > 1
+			# but first, reduce to unique values only
+			unique = {}
+			unique[value] = value for value in values
+			values = (value for k, value of unique)
+			# and we might not even need an $in
+			if true or values.length > 1
+				fields[key] = $in: values
+			else
+				fields[key] = values[0]
 
 	return fields
 
@@ -134,6 +148,7 @@ filterProjection = (projection, item) ->
 	keys = (k for k, v of projection when v)
 	return item if keys.length is 0
 
+	keys.push '_id'
 	copy = {}
 	for key in keys
 		copy[key] = item[key]
