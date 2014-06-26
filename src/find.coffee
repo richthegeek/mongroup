@@ -1,3 +1,4 @@
+mongo = require 'mongodb'
 async = require 'async'
 
 batchRunner = (queries, callback) ->
@@ -42,17 +43,32 @@ group = async.cargo batchRunner, 100
 
 class BatchCursor
 	constructor: (@collection, @criteria, @projection) ->
+		@__skip = false
+
+		Object.keys(mongo.Cursor.prototype).forEach (method) =>
+			@[method] ?= (val) ->
+				@ungroup()[method](val)
+
 		@callbacks =
 			toArray: []
 			each: []
 			count: []
 		@data = []
 
+	ungroup: (callback) ->
+		@__skip = true
+		module.exports.super.call @collection, @criteria, @projection, callback
+
+	fields: (@projection) -> @
+
 	toArray: (cb) ->
 		@callbacks.toArray.push cb
 
 	each: (cb) ->
 		@callbacks.each.push cb
+
+	nextObject: (cb) ->
+		@callbacks.nextObject.push cb
 
 	error: (err) ->
 		if err
@@ -73,12 +89,15 @@ module.exports = (criteria, projection, callback) ->
 	if typeof projection isnt 'object'
 		projection = {}
 
-	if not batchable criteria, projection
-		return module.exports.super.call(this, criteria, projection, callback)
 
 	cursor = new BatchCursor(this, criteria, projection)
+	if not batchable criteria, projection
+		return cursor.ungroup callback
 
-	group.push cursor, cursor.error.bind(cursor)
+	setTimeout (->
+		if not cursor.__skip
+			group.push cursor, cursor.error.bind(cursor)
+	), 10
 
 	if callback
 		callback null, cursor
